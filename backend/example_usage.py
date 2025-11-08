@@ -169,7 +169,7 @@ def main():
     except Exception as e:
         print(f"\n✗ Error: {e}")
         print("\nMake sure to:")
-        print("1. Update DB_CONFIG in db_helper.py with your PostgreSQL credentials")
+        print("1. Update DB_CONFIG in db_helper.py with your MySQL credentials")
         print("2. Run setup_database.py first to create the database")
 
 

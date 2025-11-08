@@ -1,0 +1,18 @@
+# FastAPI and Web Server
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+
+# Existing dependencies
+python-dotenv==1.0.0
+qdrant-client==1.12.1
+openai==1.57.2
+numpy==2.3.4
+
+# Face Recognition (optional but recommended)
+opencv-python==4.10.0.84
+insightface==0.7.3
+onnxruntime==1.20.1
+
+# HTTP client for testing
+httpx==0.28.1

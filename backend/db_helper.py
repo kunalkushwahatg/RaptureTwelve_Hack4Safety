@@ -3,39 +3,33 @@ Database Helper Module for Missing Persons System
 Provides utility functions for database operations
 """
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import sqlite3
 from datetime import datetime
 import json
 from pathlib import Path
 import shutil
 
 # Database configuration
-DB_CONFIG = {
-    'dbname': 'missing_persons_db',
-    'user': 'postgres',  # Change to your PostgreSQL username
-    'password': 'your_password',  # Change to your PostgreSQL password
-    'host': 'localhost',
-    'port': '5432'
-}
+DB_FILE = 'missing_persons.db'  # SQLite database file
 
 
 class DatabaseHelper:
     """Helper class for database operations"""
     
-    def __init__(self, config=None):
+    def __init__(self, db_file=None):
         """Initialize database connection"""
-        self.config = config or DB_CONFIG
+        self.db_file = db_file or DB_FILE
         self.conn = None
         self.cursor = None
     
     def connect(self):
         """Connect to the database"""
         try:
-            self.conn = psycopg2.connect(**self.config)
-            self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+            self.conn = sqlite3.connect(self.db_file)
+            self.conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+            self.cursor = self.conn.cursor()
             return True
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             print(f"Database connection error: {e}")
             return False
     
@@ -68,10 +62,10 @@ class DatabaseHelper:
         prefix = prefix_map.get(table_name, 'UNK')
         year = datetime.now().year
         
-        # Get the latest ID for this year
+        # Get the latest ID for this year - SQLite uses ? placeholders
         query = f"""
             SELECT pid FROM {table_name} 
-            WHERE pid LIKE %s 
+            WHERE pid LIKE ? 
             ORDER BY pid DESC 
             LIMIT 1
         """
@@ -162,7 +156,7 @@ class DatabaseHelper:
                     if saved_path:
                         extra_photos.append(saved_path)
             
-            # Prepare SQL
+            # Prepare SQL - SQLite uses ? placeholders and doesn't support RETURNING
             query = """
                 INSERT INTO missing_persons (
                     pid, fir_number, police_station, reported_date, name, age, gender,
@@ -172,28 +166,33 @@ class DatabaseHelper:
                     profile_photo, extra_photos, reporter_name, reporter_contact,
                     additional_notes, status
                 ) VALUES (
-                    %(pid)s, %(fir_number)s, %(police_station)s, %(reported_date)s,
-                    %(name)s, %(age)s, %(gender)s, %(height_cm)s, %(build)s,
-                    %(hair_color)s, %(eye_color)s, %(distinguishing_marks)s,
-                    %(clothing_description)s, %(person_description)s, %(last_seen_date)s,
-                    %(last_seen_latitude)s, %(last_seen_longitude)s, %(last_seen_address)s,
-                    %(profile_photo)s, %(extra_photos)s, %(reporter_name)s,
-                    %(reporter_contact)s, %(additional_notes)s, %(status)s
-                ) RETURNING id, pid
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
             """
             
             data['pid'] = pid
             data['profile_photo'] = profile_photo
             data['extra_photos'] = json.dumps(extra_photos) if extra_photos else None
             
-            self.cursor.execute(query, data)
-            result = self.cursor.fetchone()
+            # Convert data dict to tuple in correct order
+            values = (
+                data['pid'], data['fir_number'], data['police_station'], data['reported_date'],
+                data['name'], data['age'], data['gender'], data['height_cm'], data['build'],
+                data['hair_color'], data['eye_color'], data['distinguishing_marks'],
+                data['clothing_description'], data['person_description'], data['last_seen_date'],
+                data['last_seen_latitude'], data['last_seen_longitude'], data['last_seen_address'],
+                data['profile_photo'], data['extra_photos'], data['reporter_name'],
+                data['reporter_contact'], data['additional_notes'], data['status']
+            )
+            
+            self.cursor.execute(query, values)
             self.conn.commit()
             
             print(f"✓ Missing person added with PID: {pid}")
             return pid
             
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             self.conn.rollback()
             print(f"Error adding missing person: {e}")
             return None
@@ -223,27 +222,31 @@ class DatabaseHelper:
                     found_latitude, found_longitude, found_address,
                     profile_photo, extra_photos, initial_notes, status
                 ) VALUES (
-                    %(pid)s, %(report_number)s, %(police_station)s, %(reported_date)s,
-                    %(found_date)s, %(estimated_age)s, %(gender)s, %(height_cm)s,
-                    %(build)s, %(hair_color)s, %(eye_color)s, %(distinguishing_marks)s,
-                    %(clothing_description)s, %(person_description)s, %(found_latitude)s,
-                    %(found_longitude)s, %(found_address)s, %(profile_photo)s,
-                    %(extra_photos)s, %(initial_notes)s, %(status)s
-                ) RETURNING id, pid
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
             """
             
             data['pid'] = pid
             data['profile_photo'] = profile_photo
             data['extra_photos'] = json.dumps(extra_photos) if extra_photos else None
             
-            self.cursor.execute(query, data)
-            result = self.cursor.fetchone()
+            values = (
+                data['pid'], data['report_number'], data['police_station'], data['reported_date'],
+                data['found_date'], data['estimated_age'], data['gender'], data['height_cm'],
+                data['build'], data['hair_color'], data['eye_color'], data['distinguishing_marks'],
+                data['clothing_description'], data['person_description'], data['found_latitude'],
+                data['found_longitude'], data['found_address'], data['profile_photo'],
+                data['extra_photos'], data['initial_notes'], data['status']
+            )
+            
+            self.cursor.execute(query, values)
             self.conn.commit()
             
             print(f"✓ Preliminary UIDB report added with PID: {pid}")
             return pid
             
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             self.conn.rollback()
             print(f"Error adding preliminary UIDB: {e}")
             return None
@@ -275,30 +278,34 @@ class DatabaseHelper:
                     dna_sample_collected, dental_records_available, fingerprints_collected,
                     additional_notes, status
                 ) VALUES (
-                    %(pid)s, %(case_number)s, %(police_station)s, %(reported_date)s,
-                    %(found_date)s, %(postmortem_date)s, %(estimated_age)s, %(gender)s,
-                    %(height_cm)s, %(build)s, %(hair_color)s, %(eye_color)s,
-                    %(distinguishing_marks)s, %(clothing_description)s, %(person_description)s,
-                    %(found_latitude)s, %(found_longitude)s, %(found_address)s,
-                    %(profile_photo)s, %(extra_photos)s, %(cause_of_death)s,
-                    %(postmortem_report_url)s, %(dna_sample_collected)s,
-                    %(dental_records_available)s, %(fingerprints_collected)s,
-                    %(additional_notes)s, %(status)s
-                ) RETURNING id, pid
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
             """
             
             data['pid'] = pid
             data['profile_photo'] = profile_photo
             data['extra_photos'] = json.dumps(extra_photos) if extra_photos else None
             
-            self.cursor.execute(query, data)
-            result = self.cursor.fetchone()
+            values = (
+                data['pid'], data['case_number'], data['police_station'], data['reported_date'],
+                data['found_date'], data['postmortem_date'], data['estimated_age'], data['gender'],
+                data['height_cm'], data['build'], data['hair_color'], data['eye_color'],
+                data['distinguishing_marks'], data['clothing_description'], data['person_description'],
+                data['found_latitude'], data['found_longitude'], data['found_address'],
+                data['profile_photo'], data['extra_photos'], data['cause_of_death'],
+                data['postmortem_report_url'], data['dna_sample_collected'],
+                data['dental_records_available'], data['fingerprints_collected'],
+                data['additional_notes'], data['status']
+            )
+            
+            self.cursor.execute(query, values)
             self.conn.commit()
             
             print(f"✓ Unidentified body added with PID: {pid}")
             return pid
             
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             self.conn.rollback()
             print(f"Error adding unidentified body: {e}")
             return None
@@ -306,10 +313,11 @@ class DatabaseHelper:
     def get_by_pid(self, table_name, pid):
         """Get a record by PID"""
         try:
-            query = f"SELECT * FROM {table_name} WHERE pid = %s"
+            query = f"SELECT * FROM {table_name} WHERE pid = ?"
             self.cursor.execute(query, (pid,))
-            return self.cursor.fetchone()
-        except psycopg2.Error as e:
+            row = self.cursor.fetchone()
+            return dict(row) if row else None
+        except sqlite3.Error as e:
             print(f"Error fetching record: {e}")
             return None
     
@@ -332,28 +340,29 @@ class DatabaseHelper:
             if filters:
                 conditions = []
                 for field, value in filters.items():
-                    conditions.append(f"{field} = %s")
+                    conditions.append(f"{field} = ?")
                     params.append(value)
                 query += " WHERE " + " AND ".join(conditions)
             
             query += f" ORDER BY created_at DESC LIMIT {limit}"
             
             self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            rows = self.cursor.fetchall()
+            return [dict(row) for row in rows]
             
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             print(f"Error searching records: {e}")
             return []
     
     def update_status(self, table_name, pid, new_status):
         """Update the status of a record"""
         try:
-            query = f"UPDATE {table_name} SET status = %s WHERE pid = %s"
+            query = f"UPDATE {table_name} SET status = ? WHERE pid = ?"
             self.cursor.execute(query, (new_status, pid))
             self.conn.commit()
             print(f"✓ Status updated for {pid}: {new_status}")
             return True
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             self.conn.rollback()
             print(f"Error updating status: {e}")
             return False
