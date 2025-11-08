@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Environment variables - NEVER COMMIT
+.env
+*.env
+!.env.example
+
+# Photos (sensitive data)
+backend/photos/
+
+# Database backups
+*.sql.backup
+*.dump
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Qdrant storage
+qdrant_storage/
